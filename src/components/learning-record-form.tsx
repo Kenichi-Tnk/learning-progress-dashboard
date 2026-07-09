@@ -33,6 +33,7 @@ export const LearningRecordForm = () => {
   const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState<'all' | LearningCategory>('all');
+  const [summaryRange, setSummaryRange] = useState<'last7days' | 'monthToDate'>('last7days');
 
   useEffect(() => {
     const loadRecords = async () => {
@@ -95,6 +96,62 @@ export const LearningRecordForm = () => {
       return acc;
     }, initial);
   }, [records]);
+
+  const rangeSummary = useMemo(() => {
+    const now = new Date();
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const sevenDaysStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+    const rangeStart = summaryRange === 'last7days' ? sevenDaysStart : monthStart;
+
+    const categoryMinutes: Record<LearningCategory, number> = {
+      frontend: 0,
+      backend: 0,
+      algorithm: 0,
+      infra: 0,
+      other: 0,
+    };
+
+    const result = records.reduce(
+      (acc, record) => {
+        const recordDate = new Date(`${record.date}T00:00:00`);
+        if (Number.isNaN(recordDate.getTime())) {
+          return acc;
+        }
+
+        if (recordDate < rangeStart || recordDate > todayEnd) {
+          return acc;
+        }
+
+        acc.count += 1;
+        acc.minutes += record.minutes;
+        acc.categoryMinutes[record.category] += record.minutes;
+        return acc;
+      },
+      {
+        count: 0,
+        minutes: 0,
+        categoryMinutes,
+      }
+    );
+
+    return result;
+  }, [records, summaryRange]);
+
+  const categoryBars = useMemo(() => {
+    const entries = (Object.keys(categoryLabels) as LearningCategory[]).map((category) => ({
+      category,
+      label: categoryLabels[category],
+      minutes: rangeSummary.categoryMinutes[category],
+    }));
+
+    const maxMinutes = Math.max(...entries.map((entry) => entry.minutes), 0);
+
+    return entries.map((entry) => ({
+      ...entry,
+      widthPercent: maxMinutes === 0 ? 0 : Math.round((entry.minutes / maxMinutes) * 100),
+    }));
+  }, [rangeSummary]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -276,6 +333,69 @@ export const LearningRecordForm = () => {
             <p className="mt-1 text-sm font-medium text-slate-900">
               {periodSummary.monthlyCount}件 / {periodSummary.monthlyMinutes}分
             </p>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">集計表示</p>
+              <p className="mt-1 text-sm font-medium text-slate-900">
+                対象期間: {summaryRange === 'last7days' ? '直近7日' : '当月累計'}
+              </p>
+            </div>
+
+            <div className="inline-flex rounded-lg border border-slate-300 bg-white p-1">
+              <button
+                type="button"
+                onClick={() => setSummaryRange('last7days')}
+                className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
+                  summaryRange === 'last7days'
+                    ? 'bg-slate-900 text-white'
+                    : 'text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                直近7日
+              </button>
+              <button
+                type="button"
+                onClick={() => setSummaryRange('monthToDate')}
+                className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
+                  summaryRange === 'monthToDate'
+                    ? 'bg-slate-900 text-white'
+                    : 'text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                当月累計
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <p className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+              件数: <span className="font-semibold text-slate-900">{rangeSummary.count}件</span>
+            </p>
+            <p className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+              学習時間: <span className="font-semibold text-slate-900">{rangeSummary.minutes}分</span>
+            </p>
+            <p className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+              平均: <span className="font-semibold text-slate-900">{rangeSummary.count === 0 ? 0 : Math.round(rangeSummary.minutes / rangeSummary.count)}分/件</span>
+            </p>
+          </div>
+
+          <div className="mt-3 space-y-2">
+            {categoryBars.map((bar) => (
+              <div key={bar.category} className="grid grid-cols-[110px_1fr_48px] items-center gap-2">
+                <p className="text-xs text-slate-700">{bar.label}</p>
+                <div className="h-2 rounded-full bg-slate-200">
+                  <div
+                    className="h-2 rounded-full bg-indigo-500 transition-[width]"
+                    style={{ width: `${bar.widthPercent}%` }}
+                  />
+                </div>
+                <p className="text-right text-xs text-slate-700">{bar.minutes}分</p>
+              </div>
+            ))}
           </div>
         </div>
 

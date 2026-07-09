@@ -124,7 +124,7 @@ describe('LearningRecordForm', () => {
     expect(screen.queryByText('React学習')).not.toBeInTheDocument();
   });
 
-  it('週次・月次の集計表示が反映されること', async () => {
+  it('直近7日と当月累計を切り替えて集計表示できること', async () => {
     render(createElement(LearningRecordForm));
 
     const today = new Date();
@@ -153,8 +153,15 @@ describe('LearningRecordForm', () => {
       expect(screen.getByText('過去の学習')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('今週')).toBeInTheDocument();
-    expect(screen.getByText('今月')).toBeInTheDocument();
-    expect(screen.getAllByText('1件 / 20分')).toHaveLength(2);
+    expect(screen.getByText('集計表示')).toBeInTheDocument();
+    expect(screen.getByText('対象期間: 直近7日')).toBeInTheDocument();
+    expect(screen.getByText('件数:')).toBeInTheDocument();
+    expect(screen.getByText('学習時間:')).toBeInTheDocument();
+    expect(
+      screen.getByText((_, node) => node?.textContent?.trim() === '学習時間: 20分')
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '当月累計' }));
+    expect(screen.getByText('対象期間: 当月累計')).toBeInTheDocument();
   });
 });
