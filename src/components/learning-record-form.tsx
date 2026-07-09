@@ -31,6 +31,8 @@ export const LearningRecordForm = () => {
   const [errors, setErrors] = useState<string[]>([]);
   const [records, setRecords] = useState<LearningRecord[]>([]);
   const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterCategory, setFilterCategory] = useState<'all' | LearningCategory>('all');
 
   useEffect(() => {
     const loadRecords = async () => {
@@ -45,6 +47,54 @@ export const LearningRecordForm = () => {
     () => records.reduce((sum, record) => sum + record.minutes, 0),
     [records]
   );
+
+  const filteredRecords = useMemo(() => {
+    return records.filter((record) => {
+      const matchesCategory = filterCategory === 'all' || record.category === filterCategory;
+      const normalizedSearch = searchTerm.trim().toLowerCase();
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        record.title.toLowerCase().includes(normalizedSearch) ||
+        record.note.toLowerCase().includes(normalizedSearch);
+
+      return matchesCategory && matchesSearch;
+    });
+  }, [records, filterCategory, searchTerm]);
+
+  const periodSummary = useMemo(() => {
+    const now = new Date();
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const dayOfWeek = now.getDay();
+    const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysFromMonday);
+
+    const initial = {
+      weeklyCount: 0,
+      weeklyMinutes: 0,
+      monthlyCount: 0,
+      monthlyMinutes: 0,
+    };
+
+    return records.reduce((acc, record) => {
+      const recordDate = new Date(`${record.date}T00:00:00`);
+      if (Number.isNaN(recordDate.getTime())) {
+        return acc;
+      }
+
+      if (recordDate >= weekStart && recordDate <= todayEnd) {
+        acc.weeklyCount += 1;
+        acc.weeklyMinutes += record.minutes;
+      }
+
+      if (recordDate >= monthStart && recordDate <= todayEnd) {
+        acc.monthlyCount += 1;
+        acc.monthlyMinutes += record.minutes;
+      }
+
+      return acc;
+    }, initial);
+  }, [records]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -210,15 +260,60 @@ export const LearningRecordForm = () => {
       <div className="mt-8 border-t border-slate-200 pt-4">
         <h3 className="text-lg font-semibold text-slate-900">記録一覧</h3>
         <p className="mt-1 text-sm text-slate-600">
-          合計: {records.length}件 / {totalMinutes}分
+          表示: {filteredRecords.length}件 / 合計: {records.length}件 / {totalMinutes}分
         </p>
 
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">今週</p>
+            <p className="mt-1 text-sm font-medium text-slate-900">
+              {periodSummary.weeklyCount}件 / {periodSummary.weeklyMinutes}分
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">今月</p>
+            <p className="mt-1 text-sm font-medium text-slate-900">
+              {periodSummary.monthlyCount}件 / {periodSummary.monthlyMinutes}分
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
+          <label className="grid gap-1 text-sm font-medium !text-slate-800">
+            <span className="!text-slate-900">検索</span>
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="タイトル・メモで検索"
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none ring-indigo-200 placeholder:text-slate-400 focus:ring"
+            />
+          </label>
+
+          <label className="grid gap-1 text-sm font-medium !text-slate-800">
+            <span className="!text-slate-900">絞り込みカテゴリ</span>
+            <select
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value as 'all' | LearningCategory)}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none ring-indigo-200 focus:ring"
+            >
+              <option value="all">すべて</option>
+              {(Object.keys(categoryLabels) as LearningCategory[]).map((key) => (
+                <option key={key} value={key}>
+                  {categoryLabels[key]}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
         <ul className="mt-4 space-y-3">
-          {records.map((record) => (
+          {filteredRecords.map((record) => (
             <li key={record.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
               <p className="font-medium text-slate-900">{record.title}</p>
               <p className="text-sm text-slate-600">
-                {record.date} / {record.minutes} min / {categoryLabels[record.category]}
+                {record.date} / {record.minutes}分 / {categoryLabels[record.category]}
               </p>
               {record.note && <p className="mt-1 text-sm !text-slate-900">{record.note}</p>}
               <div className="mt-3 flex gap-2">
@@ -242,6 +337,12 @@ export const LearningRecordForm = () => {
           {records.length === 0 && (
             <li className="rounded-lg border border-dashed border-slate-300 p-3 text-sm text-slate-500">
               まだ記録がありません。
+            </li>
+          )}
+
+          {records.length > 0 && filteredRecords.length === 0 && (
+            <li className="rounded-lg border border-dashed border-slate-300 p-3 text-sm text-slate-500">
+              条件に一致する記録がありません。
             </li>
           )}
         </ul>

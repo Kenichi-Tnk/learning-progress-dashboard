@@ -89,4 +89,72 @@ describe('LearningRecordForm', () => {
     expect(dateInput.value).toBe('');
     expect(screen.getByRole('button', { name: '保存する' })).toBeInTheDocument();
   });
+
+  it('検索とカテゴリ絞り込みで表示を切り替えられること', async () => {
+    render(createElement(LearningRecordForm));
+
+    fireEvent.change(screen.getByLabelText('日付'), { target: { value: '2026-07-07' } });
+    fireEvent.change(screen.getByLabelText('タイトル'), { target: { value: 'React学習' } });
+    fireEvent.change(screen.getByLabelText('学習時間（分）'), { target: { value: '60' } });
+    fireEvent.change(screen.getByLabelText('メモ'), { target: { value: 'hooksを学習' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存する' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('React学習')).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText('日付'), { target: { value: '2026-07-08' } });
+    fireEvent.change(screen.getByLabelText('タイトル'), { target: { value: 'Laravel学習' } });
+    fireEvent.change(screen.getByLabelText('学習時間（分）'), { target: { value: '40' } });
+    fireEvent.change(screen.getByLabelText('カテゴリ'), { target: { value: 'backend' } });
+    fireEvent.change(screen.getByLabelText('メモ'), { target: { value: 'API設計を確認' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存する' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Laravel学習')).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText('検索'), { target: { value: 'React' } });
+    expect(screen.getByText('React学習')).toBeInTheDocument();
+    expect(screen.queryByText('Laravel学習')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('検索'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('絞り込みカテゴリ'), { target: { value: 'backend' } });
+    expect(screen.getByText('Laravel学習')).toBeInTheDocument();
+    expect(screen.queryByText('React学習')).not.toBeInTheDocument();
+  });
+
+  it('週次・月次の集計表示が反映されること', async () => {
+    render(createElement(LearningRecordForm));
+
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = `${today.getMonth() + 1}`.padStart(2, '0');
+    const dd = `${today.getDate()}`.padStart(2, '0');
+    const todayString = `${yyyy}-${mm}-${dd}`;
+
+    fireEvent.change(screen.getByLabelText('日付'), { target: { value: todayString } });
+    fireEvent.change(screen.getByLabelText('タイトル'), { target: { value: '本日の学習' } });
+    fireEvent.change(screen.getByLabelText('学習時間（分）'), { target: { value: '20' } });
+    fireEvent.change(screen.getByLabelText('メモ'), { target: { value: '今週・今月に含まれる' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存する' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('本日の学習')).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText('日付'), { target: { value: '2000-01-01' } });
+    fireEvent.change(screen.getByLabelText('タイトル'), { target: { value: '過去の学習' } });
+    fireEvent.change(screen.getByLabelText('学習時間（分）'), { target: { value: '40' } });
+    fireEvent.change(screen.getByLabelText('メモ'), { target: { value: '集計対象外' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存する' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('過去の学習')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('今週')).toBeInTheDocument();
+    expect(screen.getByText('今月')).toBeInTheDocument();
+    expect(screen.getAllByText('1件 / 20分')).toHaveLength(2);
+  });
 });
