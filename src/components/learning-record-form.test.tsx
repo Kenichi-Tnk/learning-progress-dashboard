@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createElement } from 'react';
 import { describe, expect, it } from 'vitest';
 import { LearningRecordForm } from './learning-record-form';
@@ -163,5 +163,39 @@ describe('LearningRecordForm', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '当月累計' }));
     expect(screen.getByText('対象期間: 当月累計')).toBeInTheDocument();
+  });
+
+  it('直近7日の日別推移バーが7本表示され、当日の分数が反映されること', async () => {
+    render(createElement(LearningRecordForm));
+
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = `${today.getMonth() + 1}`.padStart(2, '0');
+    const dd = `${today.getDate()}`.padStart(2, '0');
+    const todayString = `${yyyy}-${mm}-${dd}`;
+
+    fireEvent.change(screen.getByLabelText('日付'), { target: { value: todayString } });
+    fireEvent.change(screen.getByLabelText('タイトル'), { target: { value: '日別推移確認' } });
+    fireEvent.change(screen.getByLabelText('学習時間（分）'), { target: { value: '25' } });
+    fireEvent.change(screen.getByLabelText('メモ'), { target: { value: '日別バー確認用' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存する' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('日別推移確認')).toBeInTheDocument();
+    });
+
+    const dailyChart = screen.getByTestId('daily-trend-chart');
+    expect(within(dailyChart).getByText('直近7日の日別推移')).toBeInTheDocument();
+    expect(within(dailyChart).getAllByTestId('daily-bar-row')).toHaveLength(7);
+    expect(within(dailyChart).getByText('25分')).toBeInTheDocument();
+
+    const todayWeekdayLabels = ['日', '月', '火', '水', '木', '金', '土'];
+    const todayLabel = `${today.getMonth() + 1}/${today.getDate()}(${todayWeekdayLabels[today.getDay()]})`;
+    expect(within(dailyChart).getByText(todayLabel)).toBeInTheDocument();
+
+    const zeroDayRows = within(dailyChart)
+      .getAllByTestId('daily-bar-row')
+      .filter((row) => row.getAttribute('data-zero-day') === 'true');
+    expect(zeroDayRows.length).toBeGreaterThan(0);
   });
 });

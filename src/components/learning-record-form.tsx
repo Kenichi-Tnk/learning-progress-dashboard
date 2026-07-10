@@ -153,6 +153,49 @@ export const LearningRecordForm = () => {
     }));
   }, [rangeSummary]);
 
+  const dailyTrendBars = useMemo(() => {
+    const now = new Date();
+    const weekdayLabels = ['日', '月', '火', '水', '木', '金', '土'];
+
+    const days = Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (6 - index));
+      const key = date.toISOString().slice(0, 10);
+      return {
+        key,
+        label: `${date.getMonth() + 1}/${date.getDate()}(${weekdayLabels[date.getDay()]})`,
+        minutes: 0,
+      };
+    });
+
+    const totalsByDay = new Map(days.map((day) => [day.key, 0]));
+
+    records.forEach((record) => {
+      const date = new Date(`${record.date}T00:00:00`);
+      if (Number.isNaN(date.getTime())) {
+        return;
+      }
+
+      const key = date.toISOString().slice(0, 10);
+      if (!totalsByDay.has(key)) {
+        return;
+      }
+
+      totalsByDay.set(key, (totalsByDay.get(key) ?? 0) + record.minutes);
+    });
+
+    const filledBars = days.map((day) => ({
+      ...day,
+      minutes: totalsByDay.get(day.key) ?? 0,
+    }));
+
+    const maxMinutes = Math.max(...filledBars.map((bar) => bar.minutes), 0);
+
+    return filledBars.map((bar) => ({
+      ...bar,
+      widthPercent: maxMinutes === 0 ? 0 : Math.round((bar.minutes / maxMinutes) * 100),
+    }));
+  }, [records]);
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -339,7 +382,9 @@ export const LearningRecordForm = () => {
         <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">集計表示</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                集計表示
+              </p>
               <p className="mt-1 text-sm font-medium text-slate-900">
                 対象期間: {summaryRange === 'last7days' ? '直近7日' : '当月累計'}
               </p>
@@ -376,16 +421,26 @@ export const LearningRecordForm = () => {
               件数: <span className="font-semibold text-slate-900">{rangeSummary.count}件</span>
             </p>
             <p className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
-              学習時間: <span className="font-semibold text-slate-900">{rangeSummary.minutes}分</span>
+              学習時間:{' '}
+              <span className="font-semibold text-slate-900">{rangeSummary.minutes}分</span>
             </p>
             <p className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
-              平均: <span className="font-semibold text-slate-900">{rangeSummary.count === 0 ? 0 : Math.round(rangeSummary.minutes / rangeSummary.count)}分/件</span>
+              平均:{' '}
+              <span className="font-semibold text-slate-900">
+                {rangeSummary.count === 0
+                  ? 0
+                  : Math.round(rangeSummary.minutes / rangeSummary.count)}
+                分/件
+              </span>
             </p>
           </div>
 
           <div className="mt-3 space-y-2">
             {categoryBars.map((bar) => (
-              <div key={bar.category} className="grid grid-cols-[110px_1fr_48px] items-center gap-2">
+              <div
+                key={bar.category}
+                className="grid grid-cols-[110px_1fr_48px] items-center gap-2"
+              >
                 <p className="text-xs text-slate-700">{bar.label}</p>
                 <div className="h-2 rounded-full bg-slate-200">
                   <div
@@ -396,6 +451,38 @@ export const LearningRecordForm = () => {
                 <p className="text-right text-xs text-slate-700">{bar.minutes}分</p>
               </div>
             ))}
+          </div>
+
+          <div
+            className="mt-4 rounded-lg border border-slate-200 bg-white p-3"
+            data-testid="daily-trend-chart"
+          >
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              直近7日の日別推移
+            </p>
+            <div className="mt-2 space-y-2">
+              {dailyTrendBars.map((bar) => (
+                <div
+                  key={bar.key}
+                  className={`grid grid-cols-[72px_1fr_48px] items-center gap-2 ${
+                    bar.minutes === 0 ? 'opacity-45' : ''
+                  }`}
+                  data-testid="daily-bar-row"
+                  data-zero-day={bar.minutes === 0 ? 'true' : 'false'}
+                >
+                  <p className="text-xs text-slate-700">{bar.label}</p>
+                  <div className="h-2 rounded-full bg-slate-200">
+                    <div
+                      className={`h-2 rounded-full transition-[width] ${
+                        bar.minutes === 0 ? 'bg-slate-300' : 'bg-emerald-500'
+                      }`}
+                      style={{ width: `${bar.widthPercent}%` }}
+                    />
+                  </div>
+                  <p className="text-right text-xs text-slate-700">{bar.minutes}分</p>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
