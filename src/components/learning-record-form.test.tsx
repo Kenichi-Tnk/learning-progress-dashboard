@@ -198,4 +198,38 @@ describe('LearningRecordForm', () => {
       .filter((row) => row.getAttribute('data-zero-day') === 'true');
     expect(zeroDayRows.length).toBeGreaterThan(0);
   });
+
+  it('グラフのバーにホバーすると詳細表示が切り替わること', async () => {
+    render(createElement(LearningRecordForm));
+
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = `${today.getMonth() + 1}`.padStart(2, '0');
+    const dd = `${today.getDate()}`.padStart(2, '0');
+    const todayString = `${yyyy}-${mm}-${dd}`;
+    const weekdayLabels = ['日', '月', '火', '水', '木', '金', '土'];
+    const todayLabel = `${today.getMonth() + 1}/${today.getDate()}(${weekdayLabels[today.getDay()]})`;
+
+    fireEvent.change(screen.getByLabelText('日付'), { target: { value: todayString } });
+    fireEvent.change(screen.getByLabelText('タイトル'), { target: { value: 'フロント学習' } });
+    fireEvent.change(screen.getByLabelText('学習時間（分）'), { target: { value: '35' } });
+    fireEvent.change(screen.getByLabelText('メモ'), { target: { value: '詳細表示テスト' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存する' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('フロント学習')).toBeInTheDocument();
+    });
+
+    const categoryBarLabel = screen.getAllByText('フロントエンド').find((element) => element.tagName === 'P');
+    if (!categoryBarLabel) {
+      throw new Error('カテゴリバーのラベルが見つかりませんでした。');
+    }
+
+    fireEvent.mouseEnter(categoryBarLabel);
+    expect(screen.getByTestId('chart-detail-panel')).toHaveTextContent('カテゴリ: フロントエンド / 35分');
+
+    const dailyChart = screen.getByTestId('daily-trend-chart');
+    fireEvent.mouseEnter(within(dailyChart).getByText(todayLabel));
+    expect(screen.getByTestId('chart-detail-panel')).toHaveTextContent(`日別: ${todayLabel} / 35分`);
+  });
 });
