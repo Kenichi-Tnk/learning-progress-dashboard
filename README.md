@@ -132,11 +132,28 @@ Node.js / npm（ローカル実行環境）:
 
 ### 実 API 差し替えメモ
 
+関連リポジトリ（ポリレポ運用）:
+
+- Frontend: https://github.com/Kenichi-Tnk/learning-progress-dashboard
+- API (Laravel): https://github.com/Kenichi-Tnk/learning-progress-dashboard-api
+
+接続ルール:
+
+- 原則として `develop` 同士を接続して検証する
+- 仕様変更時は API 側変更 -> Frontend 側疎通確認の順で進める
+- PR / コミットメッセージに、対応する相手リポジトリの変更番号を記載する
+
 - 現在は API 層を抽象化し、以下 2 モードで切り替え可能
   - `memory`: InMemoryLearningRecordAPI を使用
   - `http`: HttpLearningRecordAPI を使用
 - 切り替えは環境変数 `NEXT_PUBLIC_LEARNING_RECORD_API_MODE` で行う（`memory` / `http`）
 - HTTP モードの既定ベース URL は `/api/learning-records`
+
+環境変数例（Frontend 側）:
+
+```bash
+NEXT_PUBLIC_LEARNING_RECORD_API_MODE=http
+```
 
 想定エンドポイント:
 
