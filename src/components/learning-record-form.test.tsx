@@ -1,9 +1,58 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createElement } from 'react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { InMemoryLearningRecordAPI } from '@/src/services/learning-record-api';
 import { LearningRecordForm } from './learning-record-form';
 
+const createDeferred = <T,>() => {
+  let resolvePromise!: (value: T) => void;
+  let rejectPromise!: (reason?: unknown) => void;
+
+  const promise = new Promise<T>((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
+  });
+
+  return {
+    promise,
+    resolve: resolvePromise,
+    reject: rejectPromise,
+  };
+};
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe('LearningRecordForm', () => {
+  it('初回読み込み中はローディング表示が出て、完了後に消えること', async () => {
+    const deferred = createDeferred<
+      Array<{
+        id: string;
+        createdAt: string;
+        date: string;
+        title: string;
+        minutes: number;
+        category: 'frontend';
+        note: string;
+      }>
+    >();
+
+    vi.spyOn(InMemoryLearningRecordAPI.prototype, 'getAll').mockImplementationOnce(
+      () => deferred.promise
+    );
+
+    render(createElement(LearningRecordForm));
+
+    expect(screen.getByRole('status')).toHaveTextContent('読み込み中...');
+
+    deferred.resolve([]);
+
+    await waitFor(() => {
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
+  });
+
   it('初期表示でフォームの各要素が正しく表示されること', () => {
     render(createElement(LearningRecordForm));
 
@@ -220,16 +269,377 @@ describe('LearningRecordForm', () => {
       expect(screen.getByText('フロント学習')).toBeInTheDocument();
     });
 
-    const categoryBarLabel = screen.getAllByText('フロントエンド').find((element) => element.tagName === 'P');
+    const categoryBarLabel = screen
+      .getAllByText('フロントエンド')
+      .find((element) => element.tagName === 'P');
     if (!categoryBarLabel) {
       throw new Error('カテゴリバーのラベルが見つかりませんでした。');
     }
 
     fireEvent.mouseEnter(categoryBarLabel);
-    expect(screen.getByTestId('chart-detail-panel')).toHaveTextContent('カテゴリ: フロントエンド / 35分');
+    expect(screen.getByTestId('chart-detail-panel')).toHaveTextContent(
+      'カテゴリ: フロントエンド / 35分'
+    );
 
     const dailyChart = screen.getByTestId('daily-trend-chart');
     fireEvent.mouseEnter(within(dailyChart).getByText(todayLabel));
-    expect(screen.getByTestId('chart-detail-panel')).toHaveTextContent(`日別: ${todayLabel} / 35分`);
+    expect(screen.getByTestId('chart-detail-panel')).toHaveTextContent(
+      `日別: ${todayLabel} / 35分`
+    );
+  });
+
+  it('初期読込に失敗した場合はエラーメッセージを表示すること', async () => {
+    const getAllSpy = vi
+      .spyOn(InMemoryLearningRecordAPI.prototype, 'getAll')
+      .mockRejectedValueOnce(new Error('load failed'))
+      .mockResolvedValueOnce([
+        {
+          id: 'retried-1',
+          createdAt: '2026-07-17T10:00:00.000Z',
+          date: '2026-07-17',
+          title: '再読込成功',
+          minutes: 30,
+          category: 'frontend',
+          note: 'retry success',
+        },
+      ]);
+
+    render(createElement(LearningRecordForm));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        '記録の読み込みに失敗しました。時間をおいて再度お試しください。'
+      );
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '再試行する' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('再読込成功')).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    expect(getAllSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('保存に失敗した場合はエラーメッセージを表示し一覧を更新しないこと', async () => {
+    const addSpy = vi
+      .spyOn(InMemoryLearningRecordAPI.prototype, 'add')
+      .mockRejectedValueOnce(new Error('save failed'))
+      .mockResolvedValueOnce({
+        id: 'saved-after-retry',
+        createdAt: '2026-07-17T10:00:00.000Z',
+        date: '2026-07-06',
+        title: '失敗する保存',
+        minutes: 45,
+        category: 'frontend',
+        note: '保存エラー確認',
+      });
+
+    render(createElement(LearningRecordForm));
+
+    fireEvent.change(screen.getByLabelText('日付'), { target: { value: '2026-07-06' } });
+    fireEvent.change(screen.getByLabelText('タイトル'), { target: { value: '失敗する保存' } });
+    fireEvent.change(screen.getByLabelText('学習時間（分）'), { target: { value: '45' } });
+    fireEvent.change(screen.getByLabelText('メモ'), { target: { value: '保存エラー確認' } });
+
+    fireEvent.click(screen.getByRole('button', { name: '保存する' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        '記録の保存に失敗しました。時間をおいて再度お試しください。'
+      );
+    });
+
+    expect(screen.queryByText('失敗する保存')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '再試行する' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('失敗する保存')).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    expect(addSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('再試行中はボタンが無効化されローディング表示に切り替わること', async () => {
+    const deferred = createDeferred<{
+      id: string;
+      createdAt: string;
+      date: string;
+      title: string;
+      minutes: number;
+      category: 'frontend';
+      note: string;
+    }>();
+
+    vi.spyOn(InMemoryLearningRecordAPI.prototype, 'add')
+      .mockRejectedValueOnce(new Error('save failed'))
+      .mockImplementationOnce(() => deferred.promise);
+
+    render(createElement(LearningRecordForm));
+
+    fireEvent.change(screen.getByLabelText('日付'), { target: { value: '2026-07-06' } });
+    fireEvent.change(screen.getByLabelText('タイトル'), {
+      target: { value: '再試行ローディング' },
+    });
+    fireEvent.change(screen.getByLabelText('学習時間（分）'), { target: { value: '45' } });
+    fireEvent.change(screen.getByLabelText('メモ'), { target: { value: 'retry loading' } });
+
+    fireEvent.click(screen.getByRole('button', { name: '保存する' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        '記録の保存に失敗しました。時間をおいて再度お試しください。'
+      );
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '再試行する' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '再試行中...' })).toBeDisabled();
+    });
+
+    deferred.resolve({
+      id: 'retry-loading-success',
+      createdAt: '2026-07-17T10:00:00.000Z',
+      date: '2026-07-06',
+      title: '再試行ローディング',
+      minutes: 45,
+      category: 'frontend',
+      note: 'retry loading',
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('再試行ローディング')).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+  });
+
+  it('保存中は送信ボタンが無効化され保存中表示になること', async () => {
+    const deferred = createDeferred<{
+      id: string;
+      createdAt: string;
+      date: string;
+      title: string;
+      minutes: number;
+      category: 'frontend';
+      note: string;
+    }>();
+
+    vi.spyOn(InMemoryLearningRecordAPI.prototype, 'add').mockImplementationOnce(
+      () => deferred.promise
+    );
+
+    render(createElement(LearningRecordForm));
+
+    fireEvent.change(screen.getByLabelText('日付'), { target: { value: '2026-07-06' } });
+    fireEvent.change(screen.getByLabelText('タイトル'), { target: { value: '保存中確認' } });
+    fireEvent.change(screen.getByLabelText('学習時間（分）'), { target: { value: '45' } });
+    fireEvent.change(screen.getByLabelText('メモ'), { target: { value: 'save pending' } });
+
+    fireEvent.click(screen.getByRole('button', { name: '保存する' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '保存中...' })).toBeDisabled();
+    });
+
+    deferred.resolve({
+      id: 'save-pending-1',
+      createdAt: '2026-07-17T10:00:00.000Z',
+      date: '2026-07-06',
+      title: '保存中確認',
+      minutes: 45,
+      category: 'frontend',
+      note: 'save pending',
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('保存中確認')).toBeInTheDocument();
+    });
+  });
+
+  it('更新中は送信ボタンが無効化され更新中表示になること', async () => {
+    const addDeferred = createDeferred<{
+      id: string;
+      createdAt: string;
+      date: string;
+      title: string;
+      minutes: number;
+      category: 'frontend';
+      note: string;
+    }>();
+    const updateDeferred = createDeferred<{
+      id: string;
+      createdAt: string;
+      date: string;
+      title: string;
+      minutes: number;
+      category: 'frontend';
+      note: string;
+    }>();
+
+    vi.spyOn(InMemoryLearningRecordAPI.prototype, 'add').mockImplementationOnce(
+      () => addDeferred.promise
+    );
+    vi.spyOn(InMemoryLearningRecordAPI.prototype, 'update').mockImplementationOnce(
+      () => updateDeferred.promise
+    );
+
+    render(createElement(LearningRecordForm));
+
+    fireEvent.change(screen.getByLabelText('日付'), { target: { value: '2026-07-06' } });
+    fireEvent.change(screen.getByLabelText('タイトル'), { target: { value: '更新元' } });
+    fireEvent.change(screen.getByLabelText('学習時間（分）'), { target: { value: '45' } });
+    fireEvent.change(screen.getByLabelText('メモ'), { target: { value: 'before update' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存する' }));
+
+    addDeferred.resolve({
+      id: 'update-base-1',
+      createdAt: '2026-07-17T10:00:00.000Z',
+      date: '2026-07-06',
+      title: '更新元',
+      minutes: 45,
+      category: 'frontend',
+      note: 'before update',
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('更新元')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '編集' }));
+    fireEvent.change(screen.getByLabelText('タイトル'), { target: { value: '更新中確認' } });
+    fireEvent.click(screen.getByRole('button', { name: '更新する' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '更新中...' })).toBeDisabled();
+    });
+
+    updateDeferred.resolve({
+      id: 'update-base-1',
+      createdAt: '2026-07-17T10:00:00.000Z',
+      date: '2026-07-06',
+      title: '更新中確認',
+      minutes: 45,
+      category: 'frontend',
+      note: 'before update',
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('更新中確認')).toBeInTheDocument();
+    });
+  });
+
+  it('削除中は対象レコードの削除ボタンが無効化され削除中表示になること', async () => {
+    const addDeferred = createDeferred<{
+      id: string;
+      createdAt: string;
+      date: string;
+      title: string;
+      minutes: number;
+      category: 'frontend';
+      note: string;
+    }>();
+    const deleteDeferred = createDeferred<void>();
+
+    vi.spyOn(InMemoryLearningRecordAPI.prototype, 'add').mockImplementationOnce(
+      () => addDeferred.promise
+    );
+    vi.spyOn(InMemoryLearningRecordAPI.prototype, 'delete').mockImplementationOnce(
+      () => deleteDeferred.promise
+    );
+
+    render(createElement(LearningRecordForm));
+
+    fireEvent.change(screen.getByLabelText('日付'), { target: { value: '2026-07-06' } });
+    fireEvent.change(screen.getByLabelText('タイトル'), { target: { value: '削除中確認' } });
+    fireEvent.change(screen.getByLabelText('学習時間（分）'), { target: { value: '45' } });
+    fireEvent.change(screen.getByLabelText('メモ'), { target: { value: 'delete pending' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存する' }));
+
+    addDeferred.resolve({
+      id: 'delete-base-1',
+      createdAt: '2026-07-17T10:00:00.000Z',
+      date: '2026-07-06',
+      title: '削除中確認',
+      minutes: 45,
+      category: 'frontend',
+      note: 'delete pending',
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('削除中確認')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '削除' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '削除中...' })).toBeDisabled();
+    });
+
+    deleteDeferred.resolve();
+
+    await waitFor(() => {
+      expect(screen.getByText('まだ記録がありません。')).toBeInTheDocument();
+    });
+  });
+
+  it('保存成功時に保存完了メッセージが表示されること', async () => {
+    render(createElement(LearningRecordForm));
+
+    fireEvent.change(screen.getByLabelText('日付'), { target: { value: '2026-07-06' } });
+    fireEvent.change(screen.getByLabelText('タイトル'), { target: { value: '保存成功通知' } });
+    fireEvent.change(screen.getByLabelText('学習時間（分）'), { target: { value: '45' } });
+    fireEvent.change(screen.getByLabelText('メモ'), { target: { value: 'saved' } });
+
+    fireEvent.click(screen.getByRole('button', { name: '保存する' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('success-notice')).toHaveTextContent('保存完了しました。');
+    });
+  });
+
+  it('更新成功時に更新完了メッセージが表示されること', async () => {
+    render(createElement(LearningRecordForm));
+
+    fireEvent.change(screen.getByLabelText('日付'), { target: { value: '2026-07-06' } });
+    fireEvent.change(screen.getByLabelText('タイトル'), { target: { value: '更新前タイトル' } });
+    fireEvent.change(screen.getByLabelText('学習時間（分）'), { target: { value: '30' } });
+    fireEvent.change(screen.getByLabelText('メモ'), { target: { value: '更新前メモ' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存する' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('更新前タイトル')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '編集' }));
+    fireEvent.change(screen.getByLabelText('タイトル'), { target: { value: '更新後タイトル' } });
+    fireEvent.click(screen.getByRole('button', { name: '更新する' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('success-notice')).toHaveTextContent('更新完了しました。');
+    });
+  });
+
+  it('削除成功時に削除完了メッセージが表示されること', async () => {
+    render(createElement(LearningRecordForm));
+
+    fireEvent.change(screen.getByLabelText('日付'), { target: { value: '2026-07-06' } });
+    fireEvent.change(screen.getByLabelText('タイトル'), { target: { value: '削除通知確認' } });
+    fireEvent.change(screen.getByLabelText('学習時間（分）'), { target: { value: '45' } });
+    fireEvent.change(screen.getByLabelText('メモ'), { target: { value: 'delete success' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存する' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('削除通知確認')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '削除' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('success-notice')).toHaveTextContent('削除完了しました。');
+    });
   });
 });

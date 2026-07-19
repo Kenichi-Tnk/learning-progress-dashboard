@@ -20,11 +20,20 @@ export const LearningRecordForm = () => {
     form,
     setForm,
     errors,
+    apiError,
+    successMessage,
+    canRetry,
+    isRetrying,
+    isInitialLoading,
+    isSaving,
+    isUpdating,
+    deletingRecordId,
     records,
     editingRecordId,
     handleSubmit,
     handleEdit,
     handleDelete,
+    handleRetry,
     handleCancelEdit,
   } = useLearningRecordManager();
   const [searchTerm, setSearchTerm] = useState('');
@@ -53,7 +62,6 @@ export const LearningRecordForm = () => {
 
   const dailyTrendBars = useMemo(() => calculateDailyTrendBars(records), [records]);
 
-
   return (
     <section className="mx-auto w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <h2 className="text-2xl font-semibold text-slate-900">学習記録フォーム</h2>
@@ -61,12 +69,39 @@ export const LearningRecordForm = () => {
         学習内容を記録して、進捗を少しずつ積み上げましょう。
       </p>
 
+      {isInitialLoading && (
+        <p
+          className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600"
+          role="status"
+          aria-live="polite"
+        >
+          読み込み中...
+        </p>
+      )}
+
+      {successMessage && (
+        <p
+          className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800"
+          role="status"
+          aria-live="polite"
+          data-testid="success-notice"
+        >
+          {successMessage}
+        </p>
+      )}
+
       <LearningRecordInputForm
         form={form}
         errors={errors}
+        apiError={apiError}
+        canRetry={canRetry}
+        isRetrying={isRetrying}
+        isSaving={isSaving}
+        isUpdating={isUpdating}
         editingRecordId={editingRecordId}
         onSubmit={handleSubmit}
         onFormChange={setForm}
+        onRetry={() => void handleRetry()}
         onCancelEdit={handleCancelEdit}
       />
 
@@ -82,6 +117,7 @@ export const LearningRecordForm = () => {
         categoryBars={categoryBars}
         dailyTrendBars={dailyTrendBars}
         chartDetail={chartDetail}
+        deletingRecordId={deletingRecordId}
         onSearchTermChange={setSearchTerm}
         onFilterCategoryChange={setFilterCategory}
         onSummaryRangeChange={setSummaryRange}

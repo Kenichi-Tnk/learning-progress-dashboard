@@ -5,18 +5,30 @@ import type { LearningCategory, LearningRecordInput } from '@/src/types/learning
 type LearningRecordInputFormProps = {
   form: LearningRecordInput;
   errors: string[];
+  apiError: string | null;
+  canRetry: boolean;
+  isRetrying: boolean;
+  isSaving: boolean;
+  isUpdating: boolean;
   editingRecordId: string | null;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onFormChange: (nextForm: LearningRecordInput) => void;
+  onRetry: () => void;
   onCancelEdit: () => void;
 };
 
 export const LearningRecordInputForm = ({
   form,
   errors,
+  apiError,
+  canRetry,
+  isRetrying,
+  isSaving,
+  isUpdating,
   editingRecordId,
   onSubmit,
   onFormChange,
+  onRetry,
   onCancelEdit,
 }: LearningRecordInputFormProps) => {
   return (
@@ -63,7 +75,9 @@ export const LearningRecordInputForm = ({
           <span className="!text-slate-900">カテゴリ</span>
           <select
             value={form.category}
-            onChange={(e) => onFormChange({ ...form, category: e.target.value as LearningCategory })}
+            onChange={(e) =>
+              onFormChange({ ...form, category: e.target.value as LearningCategory })
+            }
             className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none ring-indigo-200 focus:ring"
           >
             {(Object.keys(categoryLabels) as LearningCategory[]).map((key) => (
@@ -96,18 +110,47 @@ export const LearningRecordInputForm = ({
         </ul>
       )}
 
+      {apiError && (
+        <div
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3"
+          role="alert"
+        >
+          <p className="text-sm font-medium text-amber-800">{apiError}</p>
+          {canRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              disabled={isRetrying}
+              aria-busy={isRetrying}
+              className="inline-flex items-center rounded-md border border-amber-300 bg-white px-3 py-1 text-xs font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isRetrying ? '再試行中...' : '再試行する'}
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2">
         <button
           type="submit"
+          disabled={isSaving || isUpdating}
+          aria-busy={isSaving || isUpdating}
           className="inline-flex w-fit items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
         >
-          {editingRecordId ? '更新する' : '保存する'}
+          {isUpdating
+            ? '更新中...'
+            : isSaving
+              ? '保存中...'
+              : editingRecordId
+                ? '更新する'
+                : '保存する'}
         </button>
 
         {editingRecordId && (
           <button
             type="button"
             onClick={onCancelEdit}
+            disabled={isSaving || isUpdating}
             className="inline-flex w-fit items-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
           >
             編集をキャンセル

@@ -12,21 +12,31 @@
 
 ## 機能
 
-- 学習時間の記録
-- 学習内容のメモ登録
-- 記録一覧の表示
-- 週次・月次の進捗確認
-- フィルタや検索による記録の整理
-- 継続日数や達成率の可視化
+- 学習記録の登録
+- 学習記録の編集・削除
+- タイトル・メモ検索
+- カテゴリ絞り込み
+- 週次・月次サマリー表示
+- 直近7日 / 当月累計の集計切り替え
+- カテゴリ別学習時間の可視化
+- 直近7日の日別推移表示
+- API エラー時の再試行
+- 保存中・更新中・削除中の状態表示
 
 ## 技術構成
 
-- TypeScript
-- Next.js
-- React
-- Vitest
-- Playwright
-- Storybook
+- Next.js 14.2.5
+- React ^18
+- React DOM ^18
+- TypeScript 5.4.5
+- Tailwind CSS ^3.4.1
+- ESLint ^8
+- Prettier ^3.3.3
+- Vitest ^4.1.9
+- @testing-library/react ^16.3.2
+- @testing-library/jest-dom ^6.9.1
+- jsdom ^29.1.1
+- @vitejs/plugin-react ^6.0.3
 
 ## セットアップ（教材準拠）
 
@@ -41,14 +51,14 @@ npx create-next-app@14.2.5 learning-progress-dashboard
 - TypeScript: Yes
 - ESLint: Yes
 - Tailwind CSS: Yes
-- src/ directory: No
+- src/ directory: Yes
 - App Router: Yes
 - Turbopack: なし（この世代では未指定）
 - Import alias customize: No
 
 ## 現在の導入バージョン
 
-2026-06-30 時点で、教材文面からの推定に合わせて採用した主要バージョンは以下です。
+2026-07-19 時点で、現在導入している主要バージョンは以下です。
 
 - Next.js: 14.2.5
 - React: ^18
@@ -60,19 +70,52 @@ npx create-next-app@14.2.5 learning-progress-dashboard
 - @testing-library/react: ^16.3.2
 - @testing-library/jest-dom: ^6.9.1
 - jsdom: ^29.1.1
+- @vitejs/plugin-react: ^6.0.3
+- Prettier: ^3.3.3
 
-Node.js / npm（ローカル実行時）:
+Node.js / npm（ローカル実行環境）:
 
 - Node.js: v24.3.0
 - npm: 11.4.2
 
+## 現在の実装状況
+
+- 学習記録フォームをコンポーネント分割して実装
+- カスタムフックで記録の状態管理と CRUD を集約
+- モック API として InMemoryLearningRecordAPI を実装
+- バリデーション、集計、可視化ロジックを lib に分離
+- API 失敗時のエラー表示と再試行導線を実装
+- 保存・更新・削除ごとに処理中表示を分離
+
+## テスト構成
+
+- 単体テスト: Vitest
+- UI テスト: Testing Library + jsdom
+- 現在の主な対象:
+  - バリデーション
+  - 集計ロジック
+  - モック API
+  - 学習記録フォーム
+  - 状態管理フック
+
+### 現在の Vitest 導入内容
+
+- 設定ファイル: vitest.config.mjs
+- セットアップファイル: vitest.setup.ts
+- 主なテストファイル:
+  - src/lib/learning-record-validation.test.ts
+  - src/lib/learning-record-analytics.test.ts
+  - src/services/learning-record-api.test.ts
+  - src/hooks/use-learning-record-manager.test.ts
+  - src/components/learning-record-form.test.tsx
+
 ## 今後の予定
 
-1. 画面設計と要件定義を固める
-2. 学習記録の登録と一覧表示を実装する
-3. 進捗の可視化を追加する
-4. テストを整備する
-5. UI を整えて公開できる状態にする
+1. README を実装状況に合わせて継続更新する
+2. 読み込み中や成功通知など UI フィードバックを整える
+3. モック API から実 API へ置き換えやすい構成を整える
+4. 必要に応じて E2E テスト導入を検討する
+5. 公開を見据えて画面の完成度を上げる
 
 ## API とテスト導入方針（教材が旧バージョンの場合）
 
@@ -87,23 +130,34 @@ Node.js / npm（ローカル実行時）:
 - API 接続を始める段階で Laravel 側の教材バージョンを再現し、疎通確認を行う
 - その後、認証方式やレスポンス形式を含めて差分検証する
 
-### テスト（Vitest / Playwright / Storybook）
+### 実 API 差し替えメモ
 
-- Vitest: ロジックとユーティリティの単体テストから導入
-- Storybook: 主要 UI コンポーネントの見た目確認と状態整理に利用
-- Playwright: 主要ユーザーフロー（登録・一覧・更新）のE2Eを最後に追加
+- 現在は API 層を抽象化し、以下 2 モードで切り替え可能
+  - `memory`: InMemoryLearningRecordAPI を使用
+  - `http`: HttpLearningRecordAPI を使用
+- 切り替えは環境変数 `NEXT_PUBLIC_LEARNING_RECORD_API_MODE` で行う（`memory` / `http`）
+- HTTP モードの既定ベース URL は `/api/learning-records`
 
-#### 現在のVitest導入内容
+想定エンドポイント:
 
-- 設定ファイル: `vitest.config.ts`
-- セットアップファイル: `vitest.setup.ts`
-- サンプルテスト: `src/hooks/useCounter.test.ts`
+- `GET /api/learning-records`: 記録一覧取得
+- `POST /api/learning-records`: 記録作成
+- `PUT /api/learning-records/{id}`: 記録更新
+- `DELETE /api/learning-records/{id}`: 記録削除
 
-実行コマンド:
+### テスト
+
+- Vitest: ロジック、フック、コンポーネントテストに利用
+- Testing Library: UI 操作と表示確認に利用
+- Playwright / Storybook: 現時点では未導入。必要になった段階で追加検討
+
+#### 実行コマンド
 
 ```bash
 npm run test
 npm run test:watch
+npm run lint
+npm run typecheck
 ```
 
 ### バージョン運用ルール

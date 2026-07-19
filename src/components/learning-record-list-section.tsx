@@ -26,6 +26,7 @@ type LearningRecordListSectionProps = {
   onFilterCategoryChange: (value: 'all' | LearningCategory) => void;
   onSummaryRangeChange: (range: SummaryRange) => void;
   onChartDetailChange: (detail: ChartDetail | null) => void;
+  deletingRecordId: string | null;
   onEdit: (record: LearningRecord) => void;
   onDelete: (id: string) => void;
 };
@@ -42,6 +43,7 @@ export const LearningRecordListSection = ({
   categoryBars,
   dailyTrendBars,
   chartDetail,
+  deletingRecordId,
   onSearchTermChange,
   onFilterCategoryChange,
   onSummaryRangeChange,
@@ -105,20 +107,31 @@ export const LearningRecordListSection = ({
             </p>
             {record.note && <p className="mt-1 text-sm !text-slate-900">{record.note}</p>}
             <div className="mt-3 flex gap-2">
-              <button
-                type="button"
-                onClick={() => onEdit(record)}
-                className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
-              >
-                編集
-              </button>
-              <button
-                type="button"
-                onClick={() => onDelete(record.id)}
-                className="rounded-md border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 transition hover:bg-rose-100"
-              >
-                削除
-              </button>
+              {(() => {
+                const isDeleting = deletingRecordId === record.id;
+
+                return (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => onEdit(record)}
+                      disabled={isDeleting}
+                      className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                    >
+                      編集
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDelete(record.id)}
+                      disabled={isDeleting}
+                      aria-busy={isDeleting}
+                      className="rounded-md border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 transition hover:bg-rose-100"
+                    >
+                      {isDeleting ? '削除中...' : '削除'}
+                    </button>
+                  </>
+                );
+              })()}
             </div>
           </li>
         ))}

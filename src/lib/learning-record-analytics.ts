@@ -1,4 +1,8 @@
-import type { LearningCategory, LearningRecord, LearningRecordInput } from '@/src/types/learning-record';
+import type {
+  LearningCategory,
+  LearningRecord,
+  LearningRecordInput,
+} from '@/src/types/learning-record';
 
 export type SummaryRange = 'last7days' | 'monthToDate';
 
@@ -43,6 +47,14 @@ export const categoryLabels: Record<LearningCategory, string> = {
   other: 'その他',
 };
 
+const formatLocalDateKey = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+};
+
 export const initialForm: LearningRecordInput = {
   date: '',
   title: '',
@@ -69,7 +81,10 @@ export const filterLearningRecords = (
   });
 };
 
-export const calculatePeriodSummary = (records: LearningRecord[], now = new Date()): PeriodSummary => {
+export const calculatePeriodSummary = (
+  records: LearningRecord[],
+  now = new Date()
+): PeriodSummary => {
   const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const dayOfWeek = now.getDay();
@@ -168,7 +183,7 @@ export const calculateDailyTrendBars = (
 
   const days = Array.from({ length: 7 }, (_, index) => {
     const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (6 - index));
-    const key = date.toISOString().slice(0, 10);
+    const key = formatLocalDateKey(date);
     return {
       key,
       label: `${date.getMonth() + 1}/${date.getDate()}(${weekdayLabels[date.getDay()]})`,
@@ -184,7 +199,7 @@ export const calculateDailyTrendBars = (
       return;
     }
 
-    const key = date.toISOString().slice(0, 10);
+    const key = formatLocalDateKey(date);
     if (!totalsByDay.has(key)) {
       return;
     }
