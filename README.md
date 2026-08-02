@@ -147,20 +147,25 @@ Node.js / npm（ローカル実行環境）:
   - `memory`: InMemoryLearningRecordAPI を使用
   - `http`: HttpLearningRecordAPI を使用
 - 切り替えは環境変数 `NEXT_PUBLIC_LEARNING_RECORD_API_MODE` で行う（`memory` / `http`）
-- HTTP モードの既定ベース URL は `/api/learning-records`
+- HTTP モードでは Laravel API に接続する
+  - 既定 API Origin: `http://localhost`
+  - Health Check: `GET /api/health`
+  - CRUD Base URL: `/api/learning-progresses`
 
 環境変数例（Frontend 側）:
 
 ```bash
 NEXT_PUBLIC_LEARNING_RECORD_API_MODE=http
+NEXT_PUBLIC_LARAVEL_API_ORIGIN=http://localhost
 ```
 
 想定エンドポイント:
 
-- `GET /api/learning-records`: 記録一覧取得
-- `POST /api/learning-records`: 記録作成
-- `PUT /api/learning-records/{id}`: 記録更新
-- `DELETE /api/learning-records/{id}`: 記録削除
+- `GET /api/health`: 疎通確認
+- `GET /api/learning-progresses`: 記録一覧取得
+- `POST /api/learning-progresses`: 記録作成
+- `PUT /api/learning-progresses/{id}`: 記録更新
+- `DELETE /api/learning-progresses/{id}`: 記録削除
 
 ### テスト
 
@@ -186,3 +191,9 @@ npm run typecheck
 ## 補足
 
 このプロジェクトは、学習の記録を残すだけでなく、設計意図や改善の過程も残していくことを重視します。
+
+## 開発チェックリスト
+
+バックエンド API 実装や結合作業に進む前は、必ず以下を確認してください。
+
+- [FRONTEND_BACKEND_API_READY_CHECKLIST.md](FRONTEND_BACKEND_API_READY_CHECKLIST.md)

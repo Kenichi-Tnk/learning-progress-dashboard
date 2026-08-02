@@ -2,7 +2,31 @@ import type { LearningRecord, LearningRecordInput } from '@/src/types/learning-r
 
 export type LearningRecordAPIMode = 'memory' | 'http';
 
-const DEFAULT_API_BASE_URL = '/api/learning-records';
+const DEFAULT_API_ORIGIN = process.env.NEXT_PUBLIC_LARAVEL_API_ORIGIN ?? 'http://localhost';
+const DEFAULT_API_BASE_URL = `${DEFAULT_API_ORIGIN}/api/learning-progresses`;
+const DEFAULT_HEALTH_URL = `${DEFAULT_API_ORIGIN}/api/health`;
+const MEMO_MINUTES_PATTERN = /^\[minutes:(\d+)\](.*)$/s;
+const DEFAULT_STATUS = 'in_progress';
+
+type LaravelLearningProgress = {
+  id: number | string;
+  title: string;
+  category: string | null;
+  status: string;
+  memo: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type LaravelLearningProgressPayload = {
+  title: string;
+  category: string;
+  status: string;
+  memo: string;
+  started_at: string | null;
+};
 
 export interface LearningRecordAPI {
   // 新しい学習記録を追加
@@ -20,12 +44,14 @@ export interface LearningRecordAPI {
 
 type HttpLearningRecordAPIOptions = {
   baseUrl?: string;
+  healthUrl?: string;
   fetchFn?: typeof fetch;
 };
 
 export type CreateLearningRecordAPIOptions = {
   mode?: LearningRecordAPIMode;
   baseUrl?: string;
+  healthUrl?: string;
   fetchFn?: typeof fetch;
 };
 
@@ -81,15 +107,97 @@ export class InMemoryLearningRecordAPI implements LearningRecordAPI {
 
 export class HttpLearningRecordAPI implements LearningRecordAPI {
   private readonly baseUrl: string;
+  private readonly healthUrl: string;
   private readonly fetchFn: typeof fetch;
+  private isHealthChecked = false;
 
   constructor(options: HttpLearningRecordAPIOptions = {}) {
     this.baseUrl = options.baseUrl ?? DEFAULT_API_BASE_URL;
-    this.fetchFn = options.fetchFn ?? fetch;
+    this.healthUrl = options.healthUrl ?? DEFAULT_HEALTH_URL;
+    this.fetchFn = options.fetchFn ?? ((input, init) => globalThis.fetch(input, init));
+  }
+
+  private encodeMemo(note: string, minutes: number): string {
+    return `[minutes:${minutes}]${note}`;
+  }
+
+  private decodeMemo(memo: string | null): { minutes: number; note: string } {
+    if (!memo) {
+      return { minutes: 0, note: '' };
+    }
+
+    const matched = memo.match(MEMO_MINUTES_PATTERN);
+    if (!matched) {
+      return { minutes: 0, note: memo };
+    }
+
+    return {
+      minutes: Number(matched[1]),
+      note: matched[2],
+    };
+  }
+
+  private normalizeCategory(category: string | null): LearningRecord['category'] {
+    switch (category) {
+      case 'frontend':
+      case 'backend':
+      case 'algorithm':
+      case 'infra':
+      case 'other':
+        return category;
+      default:
+        return 'other';
+    }
+  }
+
+  private toBackendPayload(input: LearningRecordInput): LaravelLearningProgressPayload {
+    return {
+      title: input.title,
+      category: input.category,
+      status: DEFAULT_STATUS,
+      memo: this.encodeMemo(input.note, input.minutes),
+      started_at: input.date ? `${input.date} 00:00:00` : null,
+    };
+  }
+
+  private toLearningRecord(progress: LaravelLearningProgress): LearningRecord {
+    const { minutes, note } = this.decodeMemo(progress.memo);
+    const fallbackDate = progress.created_at ? progress.created_at.slice(0, 10) : '';
+
+    return {
+      id: String(progress.id),
+      createdAt: progress.created_at,
+      date: progress.started_at ? progress.started_at.slice(0, 10) : fallbackDate,
+      title: progress.title,
+      minutes,
+      category: this.normalizeCategory(progress.category),
+      note,
+    };
+  }
+
+  private async ensureHealth(): Promise<void> {
+    if (this.isHealthChecked) {
+      return;
+    }
+
+    const response = await this.fetchFn(this.healthUrl, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+    }
+
+    this.isHealthChecked = true;
   }
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await this.fetchFn(`${this.baseUrl}${path}`, {
+    const url = `${this.baseUrl}${path}`;
+
+    const response = await this.fetchFn(url, {
       headers: {
         'Content-Type': 'application/json',
       },
@@ -108,23 +216,35 @@ export class HttpLearningRecordAPI implements LearningRecordAPI {
   }
 
   async add(input: LearningRecordInput): Promise<LearningRecord> {
-    return this.request<LearningRecord>('', {
+    const payload = this.toBackendPayload(input);
+
+    const response = await this.request<LaravelLearningProgress>('', {
       method: 'POST',
-      body: JSON.stringify(input),
+      body: JSON.stringify(payload),
     });
+
+    return this.toLearningRecord(response);
   }
 
   async getAll(): Promise<LearningRecord[]> {
-    return this.request<LearningRecord[]>('', {
+    await this.ensureHealth();
+
+    const response = await this.request<LaravelLearningProgress[]>('', {
       method: 'GET',
     });
+
+    return response.map((progress) => this.toLearningRecord(progress));
   }
 
   async update(id: string, input: LearningRecordInput): Promise<LearningRecord> {
-    return this.request<LearningRecord>(`/${encodeURIComponent(id)}`, {
+    const payload = this.toBackendPayload(input);
+
+    const response = await this.request<LaravelLearningProgress>(`/${encodeURIComponent(id)}`, {
       method: 'PUT',
-      body: JSON.stringify(input),
+      body: JSON.stringify(payload),
     });
+
+    return this.toLearningRecord(response);
   }
 
   async delete(id: string): Promise<void> {
@@ -143,6 +263,7 @@ export const createLearningRecordAPI = (
   if (mode === 'http') {
     return new HttpLearningRecordAPI({
       baseUrl: options.baseUrl,
+      healthUrl: options.healthUrl,
       fetchFn: options.fetchFn,
     });
   }

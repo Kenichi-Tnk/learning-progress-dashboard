@@ -5,7 +5,7 @@ import {
   createLearningRecordAPI,
   resolveLearningRecordApiMode,
 } from './learning-record-api';
-import type { LearningRecord, LearningRecordInput } from '@/src/types/learning-record';
+import type { LearningRecordInput } from '@/src/types/learning-record';
 
 describe('learning-record-api factory and http adapter', () => {
   it('resolveLearningRecordApiMode は未指定や不正値で memory を返すこと', () => {
@@ -34,28 +34,46 @@ describe('learning-record-api factory and http adapter', () => {
       note: 'adapter test',
     };
 
-    const sampleRecord: LearningRecord = {
-      id: 'r-1',
-      createdAt: '2026-07-20T10:00:00.000Z',
-      ...sampleInput,
+    const sampleBackendRecord = {
+      id: 1,
+      title: 'HTTP API test',
+      category: 'frontend',
+      status: 'in_progress',
+      memo: '[minutes:30]adapter test',
+      started_at: '2026-07-20 00:00:00',
+      completed_at: null,
+      created_at: '2026-07-20T10:00:00.000000Z',
+      updated_at: '2026-07-20T10:00:00.000000Z',
+    };
+
+    const updatedBackendRecord = {
+      ...sampleBackendRecord,
+      title: 'updated',
+      memo: '[minutes:30]adapter test',
     };
 
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
-        new Response(JSON.stringify([sampleRecord]), {
+        new Response(JSON.stringify({ status: 'ok' }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         })
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify(sampleRecord), {
+        new Response(JSON.stringify([sampleBackendRecord]), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         })
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ ...sampleRecord, title: 'updated' }), {
+        new Response(JSON.stringify(sampleBackendRecord), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(updatedBackendRecord), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         })
@@ -63,33 +81,54 @@ describe('learning-record-api factory and http adapter', () => {
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
 
     const api = new HttpLearningRecordAPI({
-      baseUrl: 'http://localhost:8080/api/learning-records',
+      baseUrl: 'http://localhost:8080/api/learning-progresses',
+      healthUrl: 'http://localhost:8080/api/health',
       fetchFn: fetchMock,
     });
 
-    await expect(api.getAll()).resolves.toHaveLength(1);
-    await expect(api.add(sampleInput)).resolves.toMatchObject({ id: 'r-1' });
-    await expect(api.update('r-1', sampleInput)).resolves.toMatchObject({ title: 'updated' });
-    await expect(api.delete('r-1')).resolves.toBeUndefined();
+    await expect(api.getAll()).resolves.toEqual([
+      {
+        id: '1',
+        createdAt: '2026-07-20T10:00:00.000000Z',
+        date: '2026-07-20',
+        title: 'HTTP API test',
+        minutes: 30,
+        category: 'frontend',
+        note: 'adapter test',
+      },
+    ]);
+
+    await expect(api.add(sampleInput)).resolves.toMatchObject({
+      id: '1',
+      minutes: 30,
+      note: 'adapter test',
+    });
+    await expect(api.update('1', sampleInput)).resolves.toMatchObject({ title: 'updated' });
+    await expect(api.delete('1')).resolves.toBeUndefined();
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      'http://localhost:8080/api/learning-records',
+      'http://localhost:8080/api/health',
       expect.objectContaining({ method: 'GET' })
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      'http://localhost:8080/api/learning-records',
-      expect.objectContaining({ method: 'POST' })
+      'http://localhost:8080/api/learning-progresses',
+      expect.objectContaining({ method: 'GET' })
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      'http://localhost:8080/api/learning-records/r-1',
-      expect.objectContaining({ method: 'PUT' })
+      'http://localhost:8080/api/learning-progresses',
+      expect.objectContaining({ method: 'POST' })
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
-      'http://localhost:8080/api/learning-records/r-1',
+      'http://localhost:8080/api/learning-progresses/1',
+      expect.objectContaining({ method: 'PUT' })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      5,
+      'http://localhost:8080/api/learning-progresses/1',
       expect.objectContaining({ method: 'DELETE' })
     );
   });
@@ -100,7 +139,8 @@ describe('learning-record-api factory and http adapter', () => {
       .mockResolvedValueOnce(new Response('server error', { status: 500, statusText: 'Error' }));
 
     const api = new HttpLearningRecordAPI({
-      baseUrl: 'http://localhost:8080/api/learning-records',
+      baseUrl: 'http://localhost:8080/api/learning-progresses',
+      healthUrl: 'http://localhost:8080/api/health',
       fetchFn: fetchMock,
     });
 
