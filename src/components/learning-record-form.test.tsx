@@ -24,6 +24,31 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+const fillAndSubmitRecord = async ({
+  date,
+  title,
+  minutes,
+  category = 'frontend',
+  note,
+}: {
+  date: string;
+  title: string;
+  minutes: string;
+  category?: 'frontend' | 'backend' | 'algorithm' | 'infra' | 'other';
+  note: string;
+}) => {
+  fireEvent.change(screen.getByLabelText('日付'), { target: { value: date } });
+  fireEvent.change(screen.getByLabelText('タイトル'), { target: { value: title } });
+  fireEvent.change(screen.getByLabelText('学習時間（分）'), { target: { value: minutes } });
+  fireEvent.change(screen.getByLabelText('カテゴリ'), { target: { value: category } });
+  fireEvent.change(screen.getByLabelText('メモ'), { target: { value: note } });
+  fireEvent.click(screen.getByRole('button', { name: '保存する' }));
+
+  await waitFor(() => {
+    expect(screen.getByText(title)).toBeInTheDocument();
+  });
+};
+
 describe('LearningRecordForm', () => {
   it('初回読み込み中はローディング表示が出て、完了後に消えること', async () => {
     const deferred = createDeferred<
@@ -286,6 +311,60 @@ describe('LearningRecordForm', () => {
     expect(screen.getByTestId('chart-detail-panel')).toHaveTextContent(
       `日別: ${todayLabel} / 35分`
     );
+  });
+
+  it('記録一覧を日付降順に並べ、ページャと履歴月フィルタで切り替えられること', async () => {
+    render(createElement(LearningRecordForm));
+
+    const records = [
+      { date: '2026-06-28', title: '6月の記録', minutes: '20', category: 'other', note: 'jun' },
+      { date: '2026-07-01', title: '7月前半', minutes: '25', category: 'frontend', note: 'jul-1' },
+      { date: '2026-07-15', title: '7月中盤', minutes: '30', category: 'backend', note: 'jul-2' },
+      { date: '2026-07-30', title: '7月後半', minutes: '35', category: 'algorithm', note: 'jul-3' },
+      { date: '2026-08-01', title: '8月その1', minutes: '40', category: 'frontend', note: 'aug-1' },
+      { date: '2026-08-10', title: '8月その2', minutes: '45', category: 'infra', note: 'aug-2' },
+      { date: '2026-08-20', title: '8月その3', minutes: '50', category: 'backend', note: 'aug-3' },
+    ] as const;
+
+    for (const record of records) {
+      await fillAndSubmitRecord(record);
+    }
+
+    const listItemsPage1 = screen.getAllByRole('listitem').filter((item) =>
+      item.className.includes('shadow-sm')
+    );
+    expect(within(listItemsPage1[0]).getByText('8月その3')).toBeInTheDocument();
+    expect(within(listItemsPage1[1]).getByText('8月その2')).toBeInTheDocument();
+    expect(within(listItemsPage1[2]).getByText('8月その1')).toBeInTheDocument();
+    expect(within(listItemsPage1[3]).getByText('7月後半')).toBeInTheDocument();
+    expect(within(listItemsPage1[4]).getByText('7月中盤')).toBeInTheDocument();
+    expect(screen.queryByText('7月前半')).not.toBeInTheDocument();
+
+    expect(screen.getByText('現在 5件を表示中 / 条件一致 7件 / 全体 7件')).toBeInTheDocument();
+    expect(screen.getByText('表示件数: 5件 / 1ページ: 5件 / ページ 1/2')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '次へ' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('7月前半')).toBeInTheDocument();
+      expect(screen.getByText('6月の記録')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText('8月その3')).not.toBeInTheDocument();
+    expect(screen.getByText('表示件数: 2件 / 1ページ: 5件 / ページ 2/2')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('表示月'), { target: { value: '2026-07' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('7月後半')).toBeInTheDocument();
+      expect(screen.getByText('7月中盤')).toBeInTheDocument();
+      expect(screen.getByText('7月前半')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText('8月その3')).not.toBeInTheDocument();
+    expect(screen.queryByText('6月の記録')).not.toBeInTheDocument();
+    expect(screen.getByText('現在 3件を表示中 / 条件一致 3件 / 全体 7件')).toBeInTheDocument();
+    expect(screen.getByText('表示件数: 3件 / 1ページ: 5件 / ページ 1/1')).toBeInTheDocument();
   });
 
   it('初期読込に失敗した場合はエラーメッセージを表示すること', async () => {
