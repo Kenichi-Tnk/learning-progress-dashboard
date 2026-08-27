@@ -330,9 +330,9 @@ describe('LearningRecordForm', () => {
       await fillAndSubmitRecord(record);
     }
 
-    const listItemsPage1 = screen.getAllByRole('listitem').filter((item) =>
-      item.className.includes('shadow-sm')
-    );
+    const listItemsPage1 = screen
+      .getAllByRole('listitem')
+      .filter((item) => item.className.includes('shadow-sm'));
     expect(within(listItemsPage1[0]).getByText('8月その3')).toBeInTheDocument();
     expect(within(listItemsPage1[1]).getByText('8月その2')).toBeInTheDocument();
     expect(within(listItemsPage1[2]).getByText('8月その1')).toBeInTheDocument();

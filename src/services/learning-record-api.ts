@@ -46,6 +46,8 @@ type HttpLearningRecordAPIOptions = {
   baseUrl?: string;
   healthUrl?: string;
   fetchFn?: typeof fetch;
+  // NextAuthのセッションからtokenを取得するための差し込み口
+  getAuthToken?: () => string | null | undefined;
 };
 
 export type CreateLearningRecordAPIOptions = {
@@ -53,6 +55,7 @@ export type CreateLearningRecordAPIOptions = {
   baseUrl?: string;
   healthUrl?: string;
   fetchFn?: typeof fetch;
+  getAuthToken?: () => string | null | undefined;
 };
 
 export const resolveLearningRecordApiMode = (
@@ -109,12 +112,14 @@ export class HttpLearningRecordAPI implements LearningRecordAPI {
   private readonly baseUrl: string;
   private readonly healthUrl: string;
   private readonly fetchFn: typeof fetch;
+  private readonly getAuthToken?: () => string | null | undefined;
   private isHealthChecked = false;
 
   constructor(options: HttpLearningRecordAPIOptions = {}) {
     this.baseUrl = options.baseUrl ?? DEFAULT_API_BASE_URL;
     this.healthUrl = options.healthUrl ?? DEFAULT_HEALTH_URL;
     this.fetchFn = options.fetchFn ?? ((input, init) => globalThis.fetch(input, init));
+    this.getAuthToken = options.getAuthToken;
   }
 
   private encodeMemo(note: string, minutes: number): string {
@@ -196,10 +201,13 @@ export class HttpLearningRecordAPI implements LearningRecordAPI {
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
     const url = `${this.baseUrl}${path}`;
+    const token = this.getAuthToken?.();
 
     const response = await this.fetchFn(url, {
       headers: {
         'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       ...init,
     });
@@ -265,6 +273,7 @@ export const createLearningRecordAPI = (
       baseUrl: options.baseUrl,
       healthUrl: options.healthUrl,
       fetchFn: options.fetchFn,
+      getAuthToken: options.getAuthToken,
     });
   }
 

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { LearningRecordInputForm } from '@/src/components/learning-record-input-form';
 import { LearningRecordListSection } from '@/src/components/learning-record-list-section';
 import { useLearningRecordManager } from '@/src/hooks/use-learning-record-manager';
+import { createLearningRecordAPI } from '@/src/services/learning-record-api';
 import {
   calculateCategoryBars,
   calculateDailyTrendBars,
@@ -15,7 +16,16 @@ import {
 } from '@/src/lib/learning-record-analytics';
 import type { LearningCategory } from '@/src/types/learning-record';
 
-export const LearningRecordForm = () => {
+type LearningRecordFormProps = {
+  // NextAuthのセッションから受け取るLaravelのaccessToken
+  accessToken?: string;
+};
+
+export const LearningRecordForm = ({ accessToken }: LearningRecordFormProps = {}) => {
+  const learningRecordApi = useMemo(
+    () => createLearningRecordAPI({ getAuthToken: () => accessToken }),
+    [accessToken]
+  );
   const {
     form,
     setForm,
@@ -35,7 +45,7 @@ export const LearningRecordForm = () => {
     handleDelete,
     handleRetry,
     handleCancelEdit,
-  } = useLearningRecordManager();
+  } = useLearningRecordManager(learningRecordApi);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState<'all' | LearningCategory>('all');
   const [historyMonth, setHistoryMonth] = useState('all');
